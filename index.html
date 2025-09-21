@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Frontend App</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white flex items-center justify-center min-h-screen">
+    <div class="text-center bg-gray-800 p-10 rounded-xl shadow-2xl border border-gray-700">
+        <h1 class="text-4xl md:text-5xl font-bold text-cyan-400 mb-4">Welcome!</h1>
+        <p class="text-lg text-gray-300">This application was successfully deployed with Docker & Kubernetes.</p>
+        <div class="mt-8 p-4 bg-gray-700 rounded-lg">
+            <p class="text-sm text-left text-gray-400">Hostname:</p>
+            <p id="hostname" class="text-md font-mono text-emerald-400"></p>
+        </div>
+    </div>
+
+    <script>
+        // A simple script to display the pod's hostname
+        // In Kubernetes, this will show the pod name.
+        document.addEventListener('DOMContentLoaded', () => {
+            const hostnameEl = document.getElementById('hostname');
+            // A simple way to get hostname, might not work in all sandboxed envs
+            // but is good for this kind of demo.
+            try {
+                // In a real environment, this might be injected.
+                // For this demo, we'll simulate it.
+                // In a Kubernetes pod, the hostname is typically the pod name.
+                // We'll just generate a random one for browser preview.
+                const randomId = 'pod-' + Math.random().toString(36).substring(2, 10);
+                hostnameEl.textContent = window.location.hostname || randomId;
+            } catch (e) {
+                hostnameEl.textContent = 'Could not retrieve hostname.';
+            }
+        });
+    </script>
+</body>
+</html>

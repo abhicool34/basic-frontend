@@ -1,0 +1,66 @@
+# This manifest defines two Kubernetes objects: a Deployment and a Service.
+
+# --- DEPLOYMENT ---
+# A Deployment manages a set of replicated Pods. It ensures that a specified
+# number of Pods are running and automatically replaces any that fail.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  # The name of the deployment
+  name: frontend-app-deployment
+spec:
+  # We want 2 running instances (Pods) of our application for availability
+  replicas: 2
+  selector:
+    # This selector tells the Deployment which Pods to manage.
+    # It must match the labels defined in the Pod template below.
+    matchLabels:
+      app: frontend-app
+  template:
+    # This is the template for the Pods that the Deployment will create.
+    metadata:
+      labels:
+        # The label for the Pods, used by the selector above and the Service below.
+        app: frontend-app
+    spec:
+      containers:
+        - name: frontend-container
+          # IMPORTANT: Replace 'your-dockerhub-username/basic-frontend' with your actual image name.
+          # For local testing with Minikube, you can use 'basic-frontend:latest'
+          # after building the image into Minikube's Docker daemon.
+          image: basic-frontend:latest
+          # imagePullPolicy: IfNotPresent ensures that Kubernetes uses the local image
+          # if it exists, rather than trying to pull from a remote registry.
+          # Useful for local development with tools like Minikube.
+          imagePullPolicy: IfNotPresent
+          ports:
+            # The port inside the container that the application is listening on.
+            # This must match the port Nginx is serving on (default is 80).
+            - containerPort: 80
+
+---
+
+# --- SERVICE ---
+# A Service exposes a set of Pods to the network.
+# This one uses a LoadBalancer to expose the application outside the cluster.
+apiVersion: v1
+kind: Service
+metadata:
+  # The name of the service
+  name: frontend-app-service
+spec:
+  # Type LoadBalancer will provision an external load balancer (on supported cloud providers)
+  # to route external traffic to the service. For local clusters like Minikube,
+  # you can access it via the 'minikube service' command.
+  type: LoadBalancer
+  selector:
+    # This selector tells the Service which Pods to route traffic to.
+    # It must match the labels of the Pods defined in the Deployment above.
+    app: frontend-app
+  ports:
+    - protocol: TCP
+      # The port that the Service will be available on externally.
+      port: 80
+      # The port on the Pods that the traffic should be forwarded to.
+      targetPort: 80
+
