@@ -1,65 +1,94 @@
 // Jenkinsfile
 pipeline {
-    // Agent 'any' means Jenkins can use any available agent to run this pipeline.
-    // For a real setup, you'd configure a specific Kubernetes pod agent.
-    agent any
+    // === MODIFIED SECTION: Define a Kubernetes Pod Agent with Docker-in-Docker ===
+    agent {
+        kubernetes {
+            // This defines the Pod that will be used as the build agent.
+            // It has two containers: 'jnlp' for the Jenkins agent and 'docker' for the Docker daemon.
+            yaml """
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - name: jnlp
+    image: jenkins/inbound-agent:latest
+    args: ['\$(JENKINS_SECRET)', '\$(JENKINS_NAME)']
+    # The workspace volume is shared between the two containers
+    volumeMounts:
+    - name: workspace-volume
+      mountPath: /home/jenkins/agent/workspace
+  - name: docker
+    image: docker:20.10.17-dind
+    command: ["dockerd", "--host=tcp://127.0.0.1:2375", "--storage-driver=overlay2"]
+    securityContext:
+      privileged: true
+    # The workspace volume is shared between the two containers
+    volumeMounts:
+    - name: workspace-volume
+      mountPath: /home/jenkins/agent/workspace
+  volumes:
+  - name: workspace-volume
+    emptyDir: {}
+"""
+        }
+    }
 
-    // Environment variables used throughout the pipeline
     environment {
-        REGISTRY = 'abhicool34' // Change this to your Docker Hub username
+        // IMPORTANT: Make sure your Docker Hub username is correct
+        REGISTRY = 'abhicool34' 
         IMAGE_NAME = 'basic-frontend'
-        // REGISTRY_CREDENTIALS_ID is the ID of the secret text credential you create in Jenkins for your Docker Hub password.
+        // This is the ID of the "Username with password" credential you created in Jenkins for Docker Hub
         REGISTRY_CREDENTIALS_ID = 'dockerhubcreds'
     }
 
     stages {
-        // STAGE 1: Checkout Code
-        // Clones the source code from your Git repository.
         stage('Checkout') {
             steps {
-                git 'https://github.com/abhicool34/basic-frontend.git' // Change to your repo URL
+                // The git checkout step remains the same
+                git 'https://github.com/abhicool34/basic-frontend.git' 
             }
         }
 
-        // STAGE 2: Build Docker Image
-        // Builds the Docker image using the Dockerfile in your repo.
         stage('Build Image') {
             steps {
-                script {
-                    // Uses the Docker plugin in Jenkins. 'sh' runs a shell command.
-                    // The image is tagged with the build number to ensure uniqueness.
-                    sh "docker build -t ${REGISTRY}/${IMAGE_NAME}:${BUILD_NUMBER} ."
+                // This 'container' block tells Jenkins to run the commands
+                // inside the 'docker' sidecar container.
+                container('docker') {
+                    script {
+                        // The image is tagged with the build number for uniqueness
+                        sh "docker build -t ${REGISTRY}/${IMAGE_NAME}:${BUILD_NUMBER} ."
+                    }
                 }
             }
         }
 
-        // STAGE 3: Push Docker Image
-        // Pushes the built image to your container registry (Docker Hub).
         stage('Push Image') {
             steps {
-                // 'withCredentials' securely injects your Docker Hub credentials.
-                // You must configure these credentials in Jenkins beforehand.
-                withCredentials([usernamePassword(credentialsId: REGISTRY_CREDENTIALS_ID, passwordVariable: 'DOCKER_PASSWORD', usernameVariable: 'DOCKER_USERNAME')]) {
-                    sh "echo ${DOCKER_PASSWORD} | docker login -u ${DOCKER_USERNAME} --password-stdin"
-                    sh "docker push ${REGISTRY}/${IMAGE_NAME}:${BUILD_NUMBER}"
+                // This 'container' block also runs inside the 'docker' sidecar
+                container('docker') {
+                    // This securely injects your Docker Hub credentials
+                    withCredentials([usernamePassword(credentialsId: REGISTRY_CREDENTIALS_ID, passwordVariable: 'DOCKER_PASSWORD', usernameVariable: 'DOCKER_USERNAME')]) {
+                        sh "echo ${DOCKER_PASSWORD} | docker login -u ${DOCKER_USERNAME} --password-stdin"
+                        sh "docker push ${REGISTRY}/${IMAGE_NAME}:${BUILD_NUMBER}"
+                    }
                 }
             }
         }
 
-        // STAGE 4: Deploy to Kubernetes
-        // Updates the Kubernetes deployment to use the new image.
         stage('Deploy') {
             steps {
+                // The kubectl command runs in the default 'jnlp' container,
+                // which needs to have kubectl installed or configured.
+                // For this to work, you must also configure Jenkins with credentials
+                // to access your Kubernetes cluster.
                 script {
-                    // This uses kubectl to update the image of the deployment we created earlier.
-                    // Jenkins needs credentials to access your Kubernetes cluster for this to work.
                     sh "kubectl set image deployment/frontend-app-deployment frontend-container=${REGISTRY}/${IMAGE_NAME}:${BUILD_NUMBER}"
                 }
             }
         }
     }
 
-    // Post-build actions: Clean up the workspace and the pushed Docker image.
+    // This section will now work once the Workspace Cleanup plugin is installed.
     post {
         always {
             cleanWs()
